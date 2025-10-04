@@ -7,7 +7,7 @@ require("dotenv").config();
 const app = express();
 
 // ✅ Allow frontend
-app.use(cors({ origin: "http://localhost:5173" }));
+app.use(cors({ origin: "https://rollingstones-itindus.com/" }));
 app.use(bodyParser.json());
 
 // 🔑 MongoDB credentials from .env
@@ -59,3 +59,4 @@ app.post("/optin", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });
+
