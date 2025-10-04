@@ -1,74 +1,56 @@
 const express = require("express");
 const bodyParser = require("body-parser");
-const axios = require("axios");
 const cors = require("cors");
+const { MongoClient } = require("mongodb");
 require("dotenv").config();
 
 const app = express();
 
 // ✅ Allow frontend
-app.use(cors({ origin: "https://rollingstones-itindus.com/" }));
+app.use(cors({ origin: "http://localhost:5173" }));
 app.use(bodyParser.json());
 
-// 🔑 Credentials from .env
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REFRESH_TOKEN = process.env.REFRESH_TOKEN;
-const AUTH_DOMAIN = process.env.AUTH_DOMAIN;
-const API_DOMAIN = process.env.API_DOMAIN;
+// 🔑 MongoDB credentials from .env
+const MONGO_URI = process.env.MONGO_URI; // Atlas connection string
+const DB_NAME = process.env.DB_NAME || "mydatabase";
 const PORT = process.env.PORT || 3000;
 
-// ✅ Function to get new Access Token
-async function getAccessToken() {
+// Mongo Client
+let db;
+async function connectDB() {
   try {
-    const res = await axios.post(`${AUTH_DOMAIN}/oauth/v2/token`, null, {
-      params: {
-        refresh_token: REFRESH_TOKEN,
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: "refresh_token",
-      },
-    });
-
-    console.log("✅ New Access Token Generated");
-    return res.data.access_token;
+    const client = new MongoClient(MONGO_URI);
+    await client.connect();
+    db = client.db(DB_NAME);
+    console.log("✅ Connected to MongoDB Atlas");
   } catch (err) {
-    console.error("❌ Error getting access token:", err.response?.data || err.message);
-    throw new Error("Failed to get access token");
+    console.error("❌ MongoDB connection error:", err.message);
+    process.exit(1);
   }
 }
+connectDB();
 
 // ✅ API Route
 app.post("/optin", async (req, res) => {
   try {
-    const accessToken = await getAccessToken();
-
     const leadData = {
-      data: [
-        {
-          Last_Name: req.body.name || "Website Lead",
-          Email: req.body.email,
-          Phone: req.body.phone,
-          Lead_Source: "Website Opt-in",
-        },
-      ],
+      name: req.body.name || "Website Lead",
+      email: req.body.email,
+      phone: req.body.phone,
+      lead_source: "Website Opt-in",
+      created_at: new Date(),
     };
 
-    const response = await axios.post(`${API_DOMAIN}/crm/v2/Leads`, leadData, {
-      headers: {
-        Authorization: `Zoho-oauthtoken ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-    });
+    const result = await db.collection("leads").insertOne(leadData);
 
-    console.log("✅ Lead Saved:", response.data);
-    res.json({ success: true, message: "✅ Opt-in saved to Zoho CRM!" });
+    console.log("✅ Lead Saved:", result.insertedId);
+    res.json({ success: true, message: "✅ Opt-in saved to MongoDB!", id: result.insertedId });
   } catch (err) {
-    console.error("❌ Error saving lead:", err.response?.data || err.message);
+    console.error("❌ Error saving lead:", err.message);
     res.status(500).json({
       success: false,
       message: "❌ Error saving opt-in",
-      details: err.response?.data || err.message,
+      details: err.message,
     });
   }
 });
